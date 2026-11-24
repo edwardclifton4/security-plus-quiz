@@ -29,7 +29,11 @@
   button:disabled { opacity: .5; cursor: default; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
   .meta { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; }
-  .q { font-size: 1.1rem; font-weight: 600; margin: 0 0 16px; }
+  .q { font-size: 1.1rem; font-weight: 600; margin: 0 0 16px; white-space: pre-line; }
+  .qimg img { display: block; max-width: 100%; height: auto; margin: 0 0 16px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+  .multi { font-size: .85rem; color: var(--accent); font-weight: 600; margin: -8px 0 12px; }
+  .feedback .why { white-space: pre-line; font-size: .92rem; }
+  .feedback .why b { display: block; margin-top: 4px; }
   .opts { display: grid; gap: 10px; }
   .opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%; padding: 12px 14px; }
   .opt:hover:not(:disabled) { background: var(--hover); }
@@ -66,6 +70,8 @@
   <div class="card">
     <div class="meta"><span id="qcat"></span><span id="qsrc"></span></div>
     <p class="q" id="qtext"></p>
+    <div class="qimg" id="qimg"></div>
+    <p class="multi" id="qmulti" hidden></p>
     <div class="opts" id="opts"></div>
     <div class="feedback" id="fb"></div>
     <div class="actions">
@@ -74,9 +80,10 @@
     </div>
   </div>
 
-  <p class="hint">Keys: <b>A–D</b> or <b>1–4</b> to pick, <b>Enter</b> to submit / next. Ports covers the ports most tested on Security+, generated fresh each time.</p>
+  <p class="hint">Keys: <b>A–F</b> or <b>1–6</b> to pick, <b>Enter</b> to submit / next. Ports covers the ports most tested on Security+, generated fresh each time.</p>
 </div>
 
+<script src="sy0-701-bank.js"></script>
 <script>
 // ---------- Port table (generates port questions) ----------
 const PORTS = [
@@ -279,7 +286,11 @@ let reviewMode = false;
 let current = null, selected = null, submitted = false, lastId = null;
 
 const $ = id => document.getElementById(id);
-const allStatic = () => [...SECPLUS.map((q, i) => ({ ...q, id: "s" + i })), ...imported.map((q, i) => ({ ...q, cat: q.cat || "Imported", id: "i" + i, src: "imported" }))];
+const BANK_CAT = "SY0-701 Question Bank";
+const bankQs = (typeof BANK !== "undefined" ? BANK : []).map(q => ({ ...q, cat: BANK_CAT, id: "b" + q.n, src: "#" + q.n }));
+const isMulti = q => Array.isArray(q.answer);
+const isRight = (q, i) => isMulti(q) ? q.answer.includes(i) : q.answer === i;
+const allStatic = () => [...SECPLUS.map((q, i) => ({ ...q, id: "s" + i })), ...bankQs, ...imported.map((q, i) => ({ ...q, cat: q.cat || "Imported", id: "i" + i, src: "imported" }))];
 
 function categories() {
   const cats = new Set([...allStatic().map(q => q.cat), "Ports"]);
@@ -306,18 +317,35 @@ function nextQuestion() {
       const base = pick(choices);
       // shuffle answer order each time so you learn the answer, not the letter
       const order = shuffle(base.opts.map((_, i) => i));
-      q = { ...base, opts: order.map(i => base.opts[i]), answer: order.indexOf(base.answer) };
+      const answer = isMulti(base) ? base.answer.map(a => order.indexOf(a)).sort((x, y) => x - y) : order.indexOf(base.answer);
+      // remap option letters mentioned in explanations so they match the shuffled order
+      const nl = L => LETTERS[order.indexOf(L.charCodeAt(0) - 65)] || L;
+      const exp = base.exp && base.exp
+        .replace(/\(([A-H])\)/g, (m, L) => `(${nl(L)})`)
+        .replace(/\b(Options?|Answer|Choice) ([A-H])\b/g, (m, w, L) => `${w} ${nl(L)}`)
+        .replace(/(^|\s)([A-H])\) /g, (m, s, L) => `${s}${nl(L)}) `);
+      let why = base.why;
+      if (why) {
+        const items = [];
+        why.split("\n").forEach(l => /^[A-H]\.\s/.test(l) || !items.length ? items.push(l.replace(/^([A-H])\./, (m, L) => nl(L) + ".")) : items[items.length - 1] += "\n" + l);
+        why = items.sort().join("\n");
+      }
+      q = { ...base, opts: order.map(i => base.opts[i]), answer, exp, why };
     }
   }
-  current = q; lastId = q.id; selected = null; submitted = false;
+  current = q; lastId = q.id; selected = isMulti(q) ? [] : null; submitted = false;
   render();
 }
 
 function render() {
   const q = current;
   $("qcat").textContent = (reviewMode ? "Review · " : "") + q.cat;
-  $("qsrc").textContent = q.src === "imported" ? "imported" : "";
+  $("qsrc").textContent = q.src || "";
   $("qtext").textContent = q.q;
+  $("qimg").innerHTML = "";
+  (q.img || []).forEach(src => { const im = document.createElement("img"); im.src = src; im.alt = "Exhibit for this question"; $("qimg").appendChild(im); });
+  $("qmulti").hidden = !isMulti(q);
+  if (isMulti(q)) $("qmulti").textContent = `Select ${q.answer.length} answers`;
   $("opts").innerHTML = "";
   q.opts.forEach((o, i) => {
     const b = document.createElement("button");
@@ -335,19 +363,27 @@ function render() {
 
 function choose(i) {
   if (submitted || i >= current.opts.length) return;
+  if (isMulti(current)) {
+    selected = selected.includes(i) ? selected.filter(x => x !== i) : [...selected, i];
+    [...$("opts").children].forEach((b, j) => b.classList.toggle("sel", selected.includes(j)));
+    $("submitBtn").disabled = selected.length !== current.answer.length;
+    return;
+  }
   selected = i;
   [...$("opts").children].forEach((b, j) => b.classList.toggle("sel", j === i));
   $("submitBtn").disabled = false;
 }
 
 function submit() {
-  if (selected === null || submitted) return;
+  if (selected === null || submitted || $("submitBtn").disabled) return;
   submitted = true;
-  const ok = selected === current.answer;
+  const multi = isMulti(current);
+  const picked = j => multi ? selected.includes(j) : j === selected;
+  const ok = multi ? selected.length === current.answer.length && selected.every(j => current.answer.includes(j)) : selected === current.answer;
   [...$("opts").children].forEach((b, j) => {
     b.disabled = true; b.classList.remove("sel");
-    if (j === current.answer) b.classList.add("right");
-    else if (j === selected) b.classList.add("wrong");
+    if (isRight(current, j)) b.classList.add("right");
+    else if (picked(j)) b.classList.add("wrong");
   });
   stats.total++; if (ok) stats.right++;
   const key = current.q;
@@ -356,8 +392,10 @@ function submit() {
   save("stats", stats); save("missed", missed);
   const fb = $("fb");
   fb.className = "feedback show " + (ok ? "good" : "bad");
-  fb.innerHTML = `<strong>${ok ? "Correct!" : "Incorrect — answer is " + LETTERS[current.answer] + "."}</strong>`;
+  const ansLetters = multi ? current.answer.map(j => LETTERS[j]).join(", ") : LETTERS[current.answer];
+  fb.innerHTML = `<strong>${ok ? "Correct!" : "Incorrect — answer is " + ansLetters + "."}</strong>`;
   if (current.exp) { const p = document.createElement("p"); p.textContent = current.exp; fb.appendChild(p); }
+  if (current.why) { const p = document.createElement("p"); p.className = "why"; p.innerHTML = "<b>Why the other options are wrong</b>"; p.append(current.why); fb.appendChild(p); }
   $("submitBtn").style.display = "none"; $("nextBtn").style.display = "";
   if (reviewMode && !missed.length) reviewMode = false;
   updateStats();
@@ -401,7 +439,7 @@ document.addEventListener("keydown", e => {
   if (e.target.tagName === "SELECT") return;
   const k = e.key.toUpperCase();
   const li = LETTERS.indexOf(k), ni = "123456".indexOf(k);
-  if (li >= 0 && li < 4) choose(li); else if (ni >= 0) choose(ni);
+  if (li >= 0) choose(li); else if (ni >= 0) choose(ni);
   else if (e.key === "Enter") { e.preventDefault(); submitted ? nextQuestion() : submit(); }
 });
 
