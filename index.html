@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security+ Practice Quiz</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #fff; --text: #1c2330; --muted: #5d6878; --border: #d7dde6;
+    --accent: #c8202f; --good: #1d7f3e; --good-bg: #e3f4e8; --bad: #b42318; --bad-bg: #fde8e6; --hover: #eef2f7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1b2029; --text: #e6e9ef; --muted: #9aa4b2; --border: #2d3441;
+      --accent: #ff5a66; --good: #4cc27a; --good-bg: #173322; --bad: #ff7b6e; --bad-bg: #3a1c1a; --hover: #232a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  h1 { font-size: 1.35rem; margin: 0; }
+  h1 span { color: var(--accent); }
+  .stats { font-size: .95rem; color: var(--muted); }
+  .stats b { color: var(--text); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  select, button { font: inherit; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); padding: 8px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .meta { font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .q { font-size: 1.1rem; font-weight: 600; margin: 0 0 16px; }
+  .opts { display: grid; gap: 10px; }
+  .opt { display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%; padding: 12px 14px; }
+  .opt:hover:not(:disabled) { background: var(--hover); }
+  .opt .l { font-weight: 700; min-width: 1.4em; }
+  .opt.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .opt.right { background: var(--good-bg); border-color: var(--good); }
+  .opt.wrong { background: var(--bad-bg); border-color: var(--bad); }
+  .opt:disabled { opacity: 1; }
+  .feedback { margin-top: 16px; padding: 12px 14px; border-radius: 8px; display: none; }
+  .feedback.show { display: block; }
+  .feedback.good { background: var(--good-bg); color: var(--good); }
+  .feedback.bad { background: var(--bad-bg); color: var(--bad); }
+  .feedback p { margin: 6px 0 0; color: var(--text); }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .hint { font-size: .85rem; color: var(--muted); margin-top: 18px; }
+  input[type=file] { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Security+ <span>SY0-701 Practice</span></h1>
+    <div class="stats">Score <b id="score">0</b>/<b id="answered">0</b> · <b id="pct">–</b></div>
+  </header>
+
+  <div class="controls">
+    <select id="cat" aria-label="Category"></select>
+    <button id="reviewBtn" title="Only questions you got wrong">Review missed (<span id="missedCount">0</span>)</button>
+    <button id="resetBtn">Reset score</button>
+    <button id="importBtn" title="Load your own questions from a JSON file">Import JSON…</button>
+    <input type="file" id="file" accept=".json,application/json">
+  </div>
+
+  <div class="card">
+    <div class="meta"><span id="qcat"></span><span id="qsrc"></span></div>
+    <p class="q" id="qtext"></p>
+    <div class="opts" id="opts"></div>
+    <div class="feedback" id="fb"></div>
+    <div class="actions">
+      <button id="submitBtn" class="primary" disabled>Submit</button>
+      <button id="nextBtn" class="primary" style="display:none">Next question →</button>
+    </div>
+  </div>
+
+  <p class="hint">Keys: <b>A–D</b> or <b>1–4</b> to pick, <b>Enter</b> to submit / next. Ports covers the ports most tested on Security+, generated fresh each time.</p>
+</div>
+
+<script>
+// ---------- Port table (generates port questions) ----------
+const PORTS = [
+  { port: "20/21", proto: "FTP", tp: "TCP", desc: "File Transfer Protocol (data/control)" },
+  { port: "22", proto: "SSH / SFTP / SCP", tp: "TCP", desc: "Secure Shell and file transfer over SSH" },
+  { port: "23", proto: "Telnet", tp: "TCP", desc: "unencrypted remote terminal" },
+  { port: "25", proto: "SMTP", tp: "TCP", desc: "mail transfer between servers" },
+  { port: "49", proto: "TACACS+", tp: "TCP", desc: "Cisco AAA for device administration" },
+  { port: "53", proto: "DNS", tp: "TCP/UDP", desc: "name resolution (UDP queries, TCP zone transfers)" },
+  { port: "67/68", proto: "DHCP", tp: "UDP", desc: "automatic IP addressing (server 67, client 68)" },
+  { port: "69", proto: "TFTP", tp: "UDP", desc: "Trivial FTP, no authentication" },
+  { port: "80", proto: "HTTP", tp: "TCP", desc: "unencrypted web traffic" },
+  { port: "88", proto: "Kerberos", tp: "TCP/UDP", desc: "ticket-based authentication (Active Directory)" },
+  { port: "110", proto: "POP3", tp: "TCP", desc: "mail retrieval (downloads mail)" },
+  { port: "123", proto: "NTP", tp: "UDP", desc: "time synchronization" },
+  { port: "137-139", proto: "NetBIOS", tp: "TCP/UDP", desc: "legacy Windows name/session services" },
+  { port: "143", proto: "IMAP", tp: "TCP", desc: "mail retrieval (keeps mail on server)" },
+  { port: "161/162", proto: "SNMP", tp: "UDP", desc: "device monitoring (162 = traps)" },
+  { port: "389", proto: "LDAP", tp: "TCP", desc: "directory queries" },
+  { port: "427", proto: "SLP", tp: "TCP/UDP", desc: "Service Location Protocol" },
+  { port: "443", proto: "HTTPS", tp: "TCP", desc: "HTTP over TLS" },
+  { port: "445", proto: "SMB / CIFS", tp: "TCP", desc: "Windows file and printer sharing" },
+  { port: "465", proto: "SMTPS", tp: "TCP", desc: "SMTP over implicit TLS" },
+  { port: "500", proto: "IKE / ISAKMP", tp: "UDP", desc: "IPsec VPN key exchange" },
+  { port: "514", proto: "Syslog", tp: "UDP", desc: "centralized logging" },
+  { port: "548", proto: "AFP", tp: "TCP", desc: "Apple Filing Protocol" },
+  { port: "587", proto: "SMTP Submission", tp: "TCP", desc: "client mail submission with STARTTLS" },
+  { port: "636", proto: "LDAPS", tp: "TCP", desc: "LDAP over TLS" },
+  { port: "993", proto: "IMAPS", tp: "TCP", desc: "IMAP over TLS" },
+  { port: "995", proto: "POP3S", tp: "TCP", desc: "POP3 over TLS" },
+  { port: "1433", proto: "Microsoft SQL Server", tp: "TCP", desc: "MS SQL database" },
+  { port: "1701", proto: "L2TP", tp: "UDP", desc: "Layer 2 Tunneling Protocol VPN" },
+  { port: "1723", proto: "PPTP", tp: "TCP", desc: "legacy Point-to-Point Tunneling VPN" },
+  { port: "1812/1813", proto: "RADIUS", tp: "UDP", desc: "AAA (1812 auth, 1813 accounting)" },
+  { port: "3306", proto: "MySQL", tp: "TCP", desc: "MySQL / MariaDB database" },
+  { port: "3389", proto: "RDP", tp: "TCP", desc: "Windows Remote Desktop" },
+  { port: "5060/5061", proto: "SIP", tp: "TCP/UDP", desc: "VoIP call signaling (5061 = TLS)" },
+  { port: "5900", proto: "VNC", tp: "TCP", desc: "Virtual Network Computing remote desktop" },
+];
+
+// ---------- Security+ SY0-701 (original questions, by exam domain) ----------
+const D1 = "Sec+ 1 · General Security Concepts";
+const D2 = "Sec+ 2 · Threats & Vulnerabilities";
+const D3 = "Sec+ 3 · Security Architecture";
+const D4 = "Sec+ 4 · Security Operations";
+const D5 = "Sec+ 5 · Program Management";
+const SECPLUS = [
+  // Domain 1
+  { cat: D1, q: "A written acceptable use policy is an example of which control category?", opts: ["Technical", "Managerial", "Operational", "Physical"], answer: 1, exp: "Policies that direct how security is managed are managerial (administrative) controls." },
+  { cat: D1, q: "A sign stating \"This area is under 24-hour video surveillance\" is primarily which control type?", opts: ["Preventive", "Detective", "Deterrent", "Corrective"], answer: 2, exp: "The sign discourages an attacker from trying. It doesn't stop or detect anything itself, so it is deterrent." },
+  { cat: D1, q: "A legacy system can't support MFA, so it is placed on an isolated VLAN with extra monitoring. What type of control is this?", opts: ["Compensating", "Directive", "Corrective", "Detective"], answer: 0, exp: "A compensating control is an alternative safeguard used when the primary control isn't feasible." },
+  { cat: D1, q: "Which control is a PHYSICAL security control?", opts: ["Firewall ACL", "Acceptable use policy", "Access control vestibule (mantrap)", "Antivirus"], answer: 2, exp: "An access control vestibule physically stops tailgating. The others are technical or managerial." },
+  { cat: D1, q: "In the CIA triad, a DDoS attack primarily affects:", opts: ["Confidentiality", "Integrity", "Availability", "Non-repudiation"], answer: 2, exp: "DDoS attacks take services offline, which attacks availability." },
+  { cat: D1, q: "Which of the following provides non-repudiation for an email?", opts: ["Encrypting it with AES", "Signing it with the sender's private key", "Sending it over TLS", "Hashing it with MD5"], answer: 1, exp: "A digital signature made with the sender's private key proves who sent it, because only the sender holds that key." },
+  { cat: D1, q: "Alice wants to send Bob a message only Bob can read using asymmetric encryption. Which key does Alice encrypt with?", opts: ["Alice's private key", "Alice's public key", "Bob's public key", "Bob's private key"], answer: 2, exp: "Encrypt with the recipient's public key; only the recipient's private key can decrypt it." },
+  { cat: D1, q: "Which encryption type uses the same key to encrypt and decrypt?", opts: ["Asymmetric", "Symmetric", "Hashing", "Digital signature"], answer: 1, exp: "Symmetric algorithms such as AES use a single shared key." },
+  { cat: D1, q: "Which of these is a hashing algorithm rather than an encryption algorithm?", opts: ["AES", "RSA", "SHA-256", "3DES"], answer: 2, exp: "SHA-256 produces a one-way digest; it cannot be decrypted." },
+  { cat: D1, q: "Why is a random salt added to passwords before hashing?", opts: ["To make hashing faster", "To allow the password to be decrypted later", "To defeat precomputed rainbow-table attacks", "To compress the stored hash"], answer: 2, exp: "A unique salt makes identical passwords hash differently, so precomputed tables are useless." },
+  { cat: D1, q: "Which technique deliberately slows password hashing by running many iterations?", opts: ["Key stretching (PBKDF2, bcrypt)", "Tokenization", "Steganography", "Data masking"], answer: 0, exp: "Key stretching repeats the hash many times, greatly increasing the cost of brute-force guessing." },
+  { cat: D1, q: "Which property ensures that a stolen server private key can't be used to decrypt previously recorded TLS sessions?", opts: ["Perfect forward secrecy", "Key escrow", "Certificate pinning", "Key stretching"], answer: 0, exp: "PFS uses ephemeral session keys (e.g., ECDHE), so each session key is independent of the long-term private key." },
+  { cat: D1, q: "In a zero trust architecture, which component decides whether a subject is granted access to a resource?", opts: ["Policy enforcement point", "Policy engine", "Implicit trust zone", "Data plane"], answer: 1, exp: "The policy engine (control plane) makes the decision; the policy enforcement point carries it out." },
+  { cat: D1, q: "A fake credential is planted in a database so that any attempt to use it alerts the SOC. What is this?", opts: ["Honeynet", "Honeytoken", "Sinkhole", "Jump box"], answer: 1, exp: "A honeytoken is bait data with no legitimate use, so any access to it signals an intrusion." },
+  { cat: D1, q: "In change management, what is the purpose of a backout plan?", opts: ["To list who approved the change", "To return systems to the previous state if the change fails", "To schedule the maintenance window", "To document the business justification"], answer: 1, exp: "A backout (rollback) plan restores the prior working state if the change causes problems." },
+  { cat: D1, q: "Which method checks a certificate's revocation status in real time with a single query?", opts: ["CRL", "OCSP", "CSR", "PKCS#12"], answer: 1, exp: "OCSP asks the CA's responder about one certificate. A CRL is a downloaded list that can be out of date." },
+  { cat: D1, q: "What does an organization send to a certificate authority to request a new certificate?", opts: ["CRL", "CSR", "OCSP response", "Root certificate"], answer: 1, exp: "A Certificate Signing Request contains the public key and subject details; the private key never leaves the requester." },
+  { cat: D1, q: "A certificate issued for *.example.com is valid for which host?", opts: ["a.b.example.com", "mail.example.com", "example.net", "Any domain the server hosts"], answer: 1, exp: "A wildcard covers one level of subdomain, so mail.example.com but not a.b.example.com." },
+  { cat: D1, q: "A third party securely holds a copy of encryption keys so they can be recovered if lost. This is:", opts: ["Key escrow", "Key stretching", "Key rotation", "Key exchange"], answer: 0, exp: "Key escrow stores keys with a trusted third party for recovery." },
+  { cat: D1, q: "A payment system replaces card numbers with random values and keeps the mapping in a secure vault. What technique is this?", opts: ["Hashing", "Masking", "Tokenization", "Obfuscation"], answer: 2, exp: "Tokenization swaps sensitive data for a token that maps back to the original only through the vault." },
+  { cat: D1, q: "Which chip on a laptop's motherboard securely stores keys used by full-disk encryption such as BitLocker?", opts: ["HSM", "TPM", "UEFI", "Key escrow agent"], answer: 1, exp: "The Trusted Platform Module is on the motherboard. An HSM is a separate, dedicated appliance or card." },
+  { cat: D1, q: "Hiding a message inside the pixels of an image file is called:", opts: ["Steganography", "Obfuscation", "Tokenization", "Salting"], answer: 0, exp: "Steganography conceals the existence of data inside other data." },
+  { cat: D1, q: "Which part of AAA records what a user did after logging in?", opts: ["Authentication", "Authorization", "Accounting", "Attestation"], answer: 2, exp: "Accounting tracks user activity, such as logins, commands and resources used." },
+  { cat: D1, q: "Comparing an organization's current security controls against a framework's requirements to find what is missing is a:", opts: ["Gap analysis", "Penetration test", "Root cause analysis", "Business impact analysis"], answer: 0, exp: "Gap analysis identifies the difference between the current state and the desired state." },
+  // Domain 2
+  { cat: D2, q: "A user receives a text message claiming a package is on hold, with a link to \"reschedule delivery.\" What attack is this?", opts: ["Vishing", "Smishing", "Whaling", "Pharming"], answer: 1, exp: "Smishing is phishing over SMS text messages." },
+  { cat: D2, q: "An attacker sends emails pretending to be the CEO, asking finance to wire money urgently. What is this called?", opts: ["Vishing", "Business email compromise / whaling", "Tailgating", "Typosquatting"], answer: 1, exp: "Impersonating executives for financial fraud is business email compromise (whaling when targeting executives)." },
+  { cat: D2, q: "Attackers compromise a trade-association website that employees of a target company visit often. What attack is this?", opts: ["Watering hole", "Typosquatting", "Spear phishing", "Malvertising"], answer: 0, exp: "A watering hole attack infects a site the target group trusts and visits." },
+  { cat: D2, q: "An attacker registers \"micros0ft-support.com\" to catch users who mistype the address. This is:", opts: ["Domain hijacking", "Typosquatting", "DNS poisoning", "Pharming"], answer: 1, exp: "Typosquatting (URL hijacking) relies on look-alike or misspelled domains." },
+  { cat: D2, q: "Users who type the correct URL are redirected to a fake site because the attacker altered DNS records. What attack is this?", opts: ["Phishing", "Pharming", "Typosquatting", "Vishing"], answer: 1, exp: "Pharming redirects traffic via DNS or hosts-file poisoning, even when the user types the right address." },
+  { cat: D2, q: "A caller claims to be from the help desk doing an audit and asks for a user's employee ID to \"verify the account.\" The made-up scenario is called:", opts: ["Pretexting", "Tailgating", "Shoulder surfing", "Dumpster diving"], answer: 0, exp: "Pretexting uses a fabricated story to gain trust and get information." },
+  { cat: D2, q: "Which threat actor is MOST likely to have large funding and carry out a long-term APT campaign?", opts: ["Unskilled attacker", "Hacktivist", "Nation-state", "Insider threat"], answer: 2, exp: "Nation-state actors have the resources and patience for advanced persistent threats." },
+  { cat: D2, q: "A group defaces a company website to protest the company's environmental record. What is the most likely actor and motivation?", opts: ["Organized crime – financial gain", "Hacktivist – philosophical/political beliefs", "Nation-state – espionage", "Insider – revenge"], answer: 1, exp: "Hacktivists attack to promote a cause or political belief." },
+  { cat: D2, q: "A department signs up for an unapproved cloud file-sharing service without telling IT. This is:", opts: ["Shadow IT", "Sabotage", "Supply chain attack", "Privilege escalation"], answer: 0, exp: "Shadow IT is technology used without the IT department's knowledge or approval." },
+  { cat: D2, q: "Malware that encrypts files and demands payment is called:", opts: ["Rootkit", "Worm", "Ransomware", "Spyware"], answer: 2, exp: "Ransomware encrypts data and demands a ransom for the key." },
+  { cat: D2, q: "Which malware spreads across networks by itself, without any user action?", opts: ["Virus", "Worm", "Trojan", "Spyware"], answer: 1, exp: "Worms self-replicate across networks; viruses need a user or host file to spread." },
+  { cat: D2, q: "Malicious code that stays dormant until a specific date or event, such as an employee being removed from payroll, is a:", opts: ["Trojan", "Worm", "Logic bomb", "Rootkit"], answer: 2, exp: "A logic bomb triggers when a defined condition is met." },
+  { cat: D2, q: "An attacker inputs ' OR 1=1 -- into a login form. What attack is this?", opts: ["XSS", "SQL injection", "CSRF", "Buffer overflow"], answer: 1, exp: "Injecting SQL syntax to change a query's logic is SQL injection." },
+  { cat: D2, q: "An attacker posts a comment containing JavaScript that runs in other visitors' browsers. What vulnerability is this?", opts: ["SQL injection", "Cross-site scripting (XSS)", "Directory traversal", "CSRF"], answer: 1, exp: "Stored XSS injects script that runs in the browsers of everyone who views the page." },
+  { cat: D2, q: "A program writes more data into a memory area than was allocated, overwriting adjacent memory. This is a:", opts: ["Race condition", "Memory leak", "Buffer overflow", "Null pointer dereference"], answer: 2, exp: "A buffer overflow can overwrite memory and let an attacker run code." },
+  { cat: D2, q: "A file's permissions are checked, but the attacker swaps the file before it is used. Which vulnerability is this?", opts: ["Time-of-check to time-of-use (race condition)", "Buffer overflow", "Insecure deserialization", "Replay attack"], answer: 0, exp: "TOCTOU exploits the gap between checking a resource and using it." },
+  { cat: D2, q: "A vulnerability exploited before the vendor has released a patch is called a:", opts: ["Zero-day", "Legacy vulnerability", "False positive", "Misconfiguration"], answer: 0, exp: "Zero-day means defenders have had zero days to fix it." },
+  { cat: D2, q: "Attackers break into a managed service provider and use its remote tools to infect the MSP's customers. This is a:", opts: ["Watering hole attack", "Supply chain attack", "Bluesnarfing", "Insider threat"], answer: 1, exp: "Compromising a trusted vendor to reach its customers is a supply chain attack." },
+  { cat: D2, q: "An attacker tries \"Winter2026!\" against thousands of accounts, then moves to the next common password. What attack is this?", opts: ["Brute force", "Password spraying", "Credential stuffing", "Rainbow table"], answer: 1, exp: "Spraying tries a few common passwords across many accounts to avoid lockouts. Credential stuffing reuses pairs leaked from other breaches." },
+  { cat: D2, q: "Which attack tries to find two different inputs that produce the same hash value?", opts: ["Birthday (collision) attack", "Downgrade attack", "Pass-the-hash", "Replay attack"], answer: 0, exp: "Birthday attacks exploit probability to find hash collisions." },
+  { cat: D2, q: "An on-path attacker forces a client and server to negotiate an older, weaker version of TLS. This is a:", opts: ["Replay attack", "Downgrade attack", "Session hijacking", "DNS spoofing"], answer: 1, exp: "Downgrade attacks force weaker protocols or ciphers that are easier to break." },
+  { cat: D2, q: "Logs show a user signing in from New York and then from Singapore 10 minutes later. Which indicator is this?", opts: ["Resource consumption", "Impossible travel", "Account lockout", "Concurrent session usage"], answer: 1, exp: "Logins from distant locations too close in time to be physically possible suggest compromised credentials." },
+  { cat: D2, q: "An unpatchable legacy server must stay in production. What is the BEST way to reduce its risk?", opts: ["Isolate it on a segmented network with strict ACLs", "Disable its logging", "Give all users local admin", "Remove it from the asset inventory"], answer: 0, exp: "Segmentation and isolation limit who can reach a system that can't be patched." },
+  // Domain 3
+  { cat: D3, q: "In an IaaS cloud model, who is responsible for patching the guest operating system?", opts: ["The cloud provider", "The customer", "The hypervisor vendor", "The ISP"], answer: 1, exp: "Under shared responsibility, IaaS customers manage the OS, applications and data." },
+  { cat: D3, q: "What is a key security benefit of infrastructure as code (IaC)?", opts: ["It removes the need for access control", "Deployments are consistent and repeatable, reducing configuration drift", "It encrypts all data automatically", "It eliminates patching"], answer: 1, exp: "Defining infrastructure in code makes builds consistent, reviewable and auditable." },
+  { cat: D3, q: "A network with no physical or wireless connection to any other network is:", opts: ["Segmented", "Air-gapped", "A screened subnet", "Software-defined"], answer: 1, exp: "An air gap physically isolates a network." },
+  { cat: D3, q: "Admins must connect to a hardened host first, then manage servers in a secure zone from it. That host is a:", opts: ["Jump server", "Proxy server", "Load balancer", "Honeypot"], answer: 0, exp: "A jump server (jump box) is the single, controlled entry point into a secure zone." },
+  { cat: D3, q: "Which device is BEST for protecting a web application from SQL injection and XSS?", opts: ["Layer 4 firewall", "Web application firewall (WAF)", "Network load balancer", "VPN concentrator"], answer: 1, exp: "A WAF inspects HTTP traffic at Layer 7 for application attacks." },
+  { cat: D3, q: "Which device sits inline and can actively block malicious traffic?", opts: ["IDS", "IPS", "Network tap", "SPAN port"], answer: 1, exp: "An IPS is inline and can drop traffic. An IDS on a tap or SPAN port can only alert." },
+  { cat: D3, q: "A firewall protecting sensitive data should block all traffic if it fails. This is called:", opts: ["Fail-open", "Fail-closed (fail-secure)", "Load balancing", "Active/active"], answer: 1, exp: "Fail-closed favors security over availability when a device fails." },
+  { cat: D3, q: "Which recovery site offers the shortest recovery time?", opts: ["Cold site", "Warm site", "Hot site", "Off-site tape vault"], answer: 2, exp: "A hot site is fully equipped with current data and can take over almost immediately." },
+  { cat: D3, q: "A company can tolerate losing no more than 4 hours of data. Which metric does this describe?", opts: ["RTO", "RPO", "MTBF", "MTTR"], answer: 1, exp: "Recovery Point Objective = maximum acceptable data loss, measured in time. RTO is how long until service is restored." },
+  { cat: D3, q: "Full backup on Sunday, differential backups Monday–Friday. Which backups are needed to restore Thursday's data?", opts: ["Sunday full only", "Sunday full and Thursday differential", "Sunday full and every differential Mon–Thu", "Thursday differential only"], answer: 1, exp: "Each differential holds all changes since the last full, so you need the full plus the latest differential." },
+  { cat: D3, q: "Data stored in a country is subject to that country's laws. This concept is:", opts: ["Data sovereignty", "Data masking", "Data classification", "Data minimization"], answer: 0, exp: "Data sovereignty means data is governed by the laws of where it is physically stored." },
+  { cat: D3, q: "Which architecture delivers networking and security services (SWG, CASB, ZTNA, firewall) from the cloud?", opts: ["SD-WAN alone", "SASE", "SCADA", "VDI"], answer: 1, exp: "Secure Access Service Edge combines WAN and security services in a cloud-delivered model." },
+  { cat: D3, q: "Which standard requires devices to authenticate before a switch port or wireless network grants access?", opts: ["802.1Q", "802.1X", "802.3af", "802.11ax"], answer: 1, exp: "802.1X is port-based network access control, usually with RADIUS and EAP." },
+  { cat: D3, q: "Which BEST protects data on a stolen laptop's drive?", opts: ["TLS", "Full-disk encryption", "IPsec", "Hashing the files"], answer: 1, exp: "FDE protects data at rest; TLS and IPsec protect data in transit." },
+  { cat: D3, q: "Systems that monitor and control power grids and water treatment plants are commonly called:", opts: ["SCADA", "SDN", "SIEM", "SOAR"], answer: 0, exp: "SCADA/ICS systems control industrial processes and often run legacy, hard-to-patch software." },
+  { cat: D3, q: "A remote-access VPN sends only corporate traffic through the tunnel and everything else straight to the internet. This is:", opts: ["Full tunnel", "Split tunnel", "Site-to-site", "Transport mode"], answer: 1, exp: "Split tunneling saves bandwidth but means internet traffic bypasses corporate security controls." },
+  { cat: D3, q: "Which wireless security protocol is the most secure?", opts: ["WEP", "WPA with TKIP", "WPA2 with AES", "WPA3 with SAE"], answer: 3, exp: "WPA3 replaces the PSK handshake with SAE, which resists offline dictionary attacks." },
+  { cat: D3, q: "Which isolated area of a processor runs sensitive code and keys so even the OS can't read them?", opts: ["Secure enclave", "Swap file", "BIOS", "Hypervisor"], answer: 0, exp: "A secure enclave (trusted execution environment) protects data in use from the rest of the system." },
+  // Domain 4
+  { cat: D4, q: "Which of the following is an example of multifactor authentication?", opts: ["Password and PIN", "Password and security question", "Password and a code from an authenticator app", "Two different passwords"], answer: 2, exp: "MFA needs different factor types: something you know (password) + something you have (authenticator device)." },
+  { cat: D4, q: "Which principle says users should get only the access needed to do their job?", opts: ["Separation of duties", "Least privilege", "Defense in depth", "Implicit deny"], answer: 1, exp: "Least privilege limits every account to the minimum required permissions." },
+  { cat: D4, q: "What does a SIEM primarily do?", opts: ["Encrypts traffic between sites", "Collects and correlates logs to detect events", "Assigns IP addresses", "Blocks spam email"], answer: 1, exp: "A SIEM aggregates logs from many sources and correlates them to raise alerts." },
+  { cat: D4, q: "In the incident response process, which phase comes immediately after containment?", opts: ["Detection", "Eradication", "Lessons learned", "Preparation"], answer: 1, exp: "Order: Preparation → Detection → Analysis → Containment → Eradication → Recovery → Lessons learned." },
+  { cat: D4, q: "When collecting digital evidence, which should be captured FIRST based on order of volatility?", opts: ["Hard drive image", "System RAM", "Archived backups", "Printed logs"], answer: 1, exp: "Collect the most volatile data first; RAM is lost at power-off." },
+  { cat: D4, q: "Which document records who handled a piece of evidence and when?", opts: ["Chain of custody", "Legal hold", "Rules of engagement", "Incident report"], answer: 0, exp: "Chain of custody proves evidence wasn't tampered with, so it is admissible." },
+  { cat: D4, q: "Legal counsel orders that all email related to a lawsuit be preserved and not deleted. This is a:", opts: ["Data retention policy", "Legal hold", "Right to be forgotten request", "Data classification"], answer: 1, exp: "A legal hold suspends normal deletion for data relevant to litigation." },
+  { cat: D4, q: "Which DNS-published email setting tells receiving servers what to do when a message fails SPF and DKIM checks?", opts: ["MX", "DKIM", "DMARC", "PTR"], answer: 2, exp: "DMARC sets the policy (none, quarantine, reject) and reporting for failed messages." },
+  { cat: D4, q: "Which email security mechanism adds a digital signature to outgoing messages so receivers can verify them?", opts: ["SPF", "DKIM", "DMARC", "STARTTLS"], answer: 1, exp: "DKIM signs messages with the domain's private key. SPF lists allowed sending servers." },
+  { cat: D4, q: "Which tool automatically runs playbooks, such as isolating a host when a malware alert fires?", opts: ["SIEM", "SOAR", "NetFlow", "DLP"], answer: 1, exp: "SOAR (Security Orchestration, Automation and Response) automates response actions." },
+  { cat: D4, q: "Which vulnerability scan gives the MOST accurate view of missing patches on a host?", opts: ["Non-credentialed scan", "Credentialed scan", "Port scan", "Passive network sniffing"], answer: 1, exp: "A credentialed scan logs in and can check installed software and configuration directly." },
+  { cat: D4, q: "Which system rates vulnerability severity on a 0–10 scale?", opts: ["CVE", "CVSS", "SCAP", "STIX"], answer: 1, exp: "CVSS scores severity. CVE is the identifier list of known vulnerabilities." },
+  { cat: D4, q: "A scanner reports a vulnerability that, after investigation, does not actually exist. This is a:", opts: ["True positive", "False positive", "False negative", "True negative"], answer: 1, exp: "A false positive is an alert for something that isn't really there." },
+  { cat: D4, q: "Running a suspicious attachment in an isolated environment to observe its behavior is called:", opts: ["Sandboxing", "Fuzzing", "Hashing", "Baselining"], answer: 0, exp: "A sandbox lets you watch malware without risking production systems." },
+  { cat: D4, q: "Which standard exchanges XML authentication assertions for web single sign-on between an identity provider and a service provider?", opts: ["SAML", "LDAP", "RADIUS", "Kerberos"], answer: 0, exp: "SAML is the XML-based federation standard for web SSO." },
+  { cat: D4, q: "A user lets a photo-printing site access their cloud photos without sharing their password. Which protocol is MOST likely used?", opts: ["OAuth", "TACACS+", "NTLM", "PAP"], answer: 0, exp: "OAuth handles delegated authorization using access tokens." },
+  { cat: D4, q: "Which access control model assigns security labels to data and clearances to users, enforced by the system?", opts: ["DAC", "RBAC", "MAC", "Rule-based"], answer: 2, exp: "Mandatory Access Control uses labels and clearances that users can't change." },
+  { cat: D4, q: "Admins receive elevated rights only for a limited time when they request them. Which practice is this?", opts: ["Just-in-time permissions (PAM)", "Single sign-on", "Federation", "Account lockout"], answer: 0, exp: "Privileged access management with JIT elevation reduces standing admin privileges." },
+  { cat: D4, q: "An employee is terminated. What should happen to their account FIRST?", opts: ["Delete all their files", "Disable the account", "Email them a new password", "Leave it active for 90 days"], answer: 1, exp: "Disable immediately to cut access while keeping data for review; delete later per policy." },
+  { cat: D4, q: "A vendor shreds old hard drives. Which document proves the drives were destroyed?", opts: ["Certificate of destruction", "Chain of custody form", "Bill of materials", "Service level agreement"], answer: 0, exp: "A certificate of destruction documents that media was properly destroyed." },
+  { cat: D4, q: "Which tool monitors endpoints for suspicious behavior and can isolate an infected host?", opts: ["EDR", "WAF", "Proxy", "UTM"], answer: 0, exp: "Endpoint Detection and Response watches endpoint behavior and can respond automatically." },
+  { cat: D4, q: "Which technology can stop an employee from emailing a spreadsheet of credit card numbers outside the company?", opts: ["DLP", "IDS", "NAT", "VPN"], answer: 0, exp: "Data Loss Prevention inspects content and blocks sensitive data from leaving." },
+  { cat: D4, q: "Which is a hardening step for a new server?", opts: ["Enable all services for flexibility", "Disable unused services and ports", "Keep the default admin password", "Turn off logging"], answer: 1, exp: "Hardening reduces attack surface by removing anything not needed." },
+  // Domain 5
+  { cat: D5, q: "A risk has an SLE of $5,000 and an ARO of 0.5. What is the ALE?", opts: ["$2,500", "$5,000", "$10,000", "$5,500"], answer: 0, exp: "ALE = SLE × ARO = $5,000 × 0.5 = $2,500." },
+  { cat: D5, q: "An asset is worth $100,000 and a flood would destroy 25% of it. What is the SLE?", opts: ["$4,000", "$25,000", "$75,000", "$100,000"], answer: 1, exp: "SLE = Asset value × Exposure factor = $100,000 × 0.25 = $25,000." },
+  { cat: D5, q: "Buying cyber insurance is an example of which risk response?", opts: ["Avoid", "Transfer", "Accept", "Mitigate"], answer: 1, exp: "Insurance transfers the financial impact of a risk to another party." },
+  { cat: D5, q: "A company decides to stop offering a risky service entirely. This risk response is:", opts: ["Avoid", "Transfer", "Accept", "Mitigate"], answer: 0, exp: "Avoidance eliminates the risk by ending the activity that causes it." },
+  { cat: D5, q: "A control would cost more than the potential loss, so management documents the risk and takes no action. This is:", opts: ["Risk avoidance", "Risk acceptance", "Risk transference", "Risk mitigation"], answer: 1, exp: "Risk acceptance is a documented decision to live with the risk." },
+  { cat: D5, q: "Which document lists identified risks, their owners, ratings and treatments?", opts: ["Risk register", "Asset inventory", "Incident report", "Statement of work"], answer: 0, exp: "The risk register tracks each risk through its lifecycle." },
+  { cat: D5, q: "Which analysis identifies critical business functions and how long they can be down?", opts: ["Business impact analysis", "Gap analysis", "Root cause analysis", "Penetration test"], answer: 0, exp: "A BIA determines critical functions, MTD, RTO and RPO." },
+  { cat: D5, q: "A payroll company handles employee data on behalf of its client. Under privacy regulations, the payroll company is the data:", opts: ["Owner", "Controller", "Processor", "Subject"], answer: 2, exp: "The controller decides why data is processed; the processor handles it on the controller's behalf." },
+  { cat: D5, q: "Which regulation gives EU residents the \"right to be forgotten\"?", opts: ["HIPAA", "GDPR", "SOX", "PCI DSS"], answer: 1, exp: "GDPR gives data subjects the right to have their personal data erased." },
+  { cat: D5, q: "Which agreement describes the specific deliverables, timeline and cost for one project with a vendor?", opts: ["MOU", "SOW", "NDA", "MSA"], answer: 1, exp: "A Statement of Work covers one engagement; the MSA sets general terms for all future work." },
+  { cat: D5, q: "Which document defines the uptime and response times a vendor guarantees?", opts: ["NDA", "SLA", "MOU", "AUP"], answer: 1, exp: "A Service Level Agreement defines measurable service commitments." },
+  { cat: D5, q: "Pen testers are given full network diagrams and source code before testing. What type of test is this?", opts: ["Known environment", "Unknown environment", "Partially known environment", "Passive reconnaissance"], answer: 0, exp: "Known environment (formerly white box) testers have full information." },
+  { cat: D5, q: "Which document defines what a penetration tester is allowed to test, when, and how?", opts: ["Rules of engagement", "Acceptable use policy", "NDA", "Risk register"], answer: 0, exp: "Rules of engagement set scope, timing, methods and contacts for the test." },
+  { cat: D5, q: "Team members talk through their response to a simulated ransomware incident in a conference room without touching systems. This is a:", opts: ["Tabletop exercise", "Failover test", "Parallel processing test", "Penetration test"], answer: 0, exp: "A tabletop exercise is a discussion-based walkthrough of a scenario." },
+  { cat: D5, q: "Which contract clause lets a company review a vendor's security controls?", opts: ["Right-to-audit clause", "Non-compete clause", "Indemnification clause", "Force majeure clause"], answer: 0, exp: "A right-to-audit clause permits the customer to assess the vendor's security." },
+  { cat: D5, q: "Which role implements and maintains security controls on data day to day, such as backups and permissions?", opts: ["Data owner", "Data custodian", "Data subject", "Data controller"], answer: 1, exp: "The owner is accountable and classifies data; the custodian handles it day to day." },
+  { cat: D5, q: "What is the main purpose of running phishing simulation campaigns against employees?", opts: ["To punish employees", "To measure and improve security awareness", "To test the email server's speed", "To collect employee passwords"], answer: 1, exp: "Simulations show who needs more training and track awareness over time." },
+];
+
+// Ports that matter for Security+
+const SEC_PORTS = new Set(["22", "23", "49", "53", "88", "123", "161/162", "389", "443", "445", "465", "500", "514", "587", "636", "993", "995", "1701", "1812/1813", "3389"]);
+
+// ---------- Helpers ----------
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const LETTERS = ["A", "B", "C", "D", "E", "F"];
+
+function makeMC(correct, pool) {
+  const wrong = shuffle([...new Set(pool.filter(x => x !== correct))]).slice(0, 3);
+  const opts = shuffle([correct, ...wrong]);
+  return { opts, answer: opts.indexOf(correct) };
+}
+
+function genPortQuestion() {
+  const SP = PORTS.filter(x => SEC_PORTS.has(x.port));
+  const p = pick(SP);
+  const kind = Math.floor(Math.random() * 3);
+  if (kind === 0) {
+    const { opts, answer } = makeMC(p.port, SP.map(x => x.port));
+    return { cat: "Ports", q: `Which port does ${p.proto} use by default?`, opts, answer, exp: `${p.proto} uses ${p.tp} ${p.port} — ${p.desc}.`, id: "port0-" + p.port };
+  }
+  if (kind === 1) {
+    const { opts, answer } = makeMC(p.proto, SP.map(x => x.proto));
+    return { cat: "Ports", q: `Which protocol uses port ${p.port} by default?`, opts, answer, exp: `Port ${p.port} (${p.tp}) is ${p.proto} — ${p.desc}.`, id: "port1-" + p.port };
+  }
+  const opts = ["TCP only", "UDP only", "Both TCP and UDP", "Neither – it runs directly on IP"];
+  const answer = p.tp === "TCP" ? 0 : p.tp === "UDP" ? 1 : 2;
+  return { cat: "Ports", q: `${p.proto} (port ${p.port}) primarily uses which transport protocol?`, opts, answer, exp: `${p.proto} uses ${p.tp} ${p.port} — ${p.desc}.`, id: "port2-" + p.port };
+}
+
+// ---------- State ----------
+const LS = k => "secplus_" + k;
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(LS(k))) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(LS(k), JSON.stringify(v)); } catch {} };
+
+let imported = load("imported", []);
+let stats = load("stats", { right: 0, total: 0 });
+let missed = load("missed", []);       // full question objects
+let reviewMode = false;
+let current = null, selected = null, submitted = false, lastId = null;
+
+const $ = id => document.getElementById(id);
+const allStatic = () => [...SECPLUS.map((q, i) => ({ ...q, id: "s" + i })), ...imported.map((q, i) => ({ ...q, cat: q.cat || "Imported", id: "i" + i, src: "imported" }))];
+
+function categories() {
+  const cats = new Set([...allStatic().map(q => q.cat), "Ports"]);
+  return ["All", ...cats];
+}
+function fillCats() {
+  const sel = $("cat"), cur = sel.value || "All";
+  sel.innerHTML = categories().map(c => `<option value="${c}">${c === "All" ? "All Security+ topics" : c}</option>`).join("");
+  sel.value = categories().includes(cur) ? cur : "All";
+}
+
+function nextQuestion() {
+  const cat = $("cat").value;
+  let q;
+  if (reviewMode && missed.length) {
+    q = pick(missed.length > 1 ? missed.filter(m => m.id !== lastId) : missed);
+  } else {
+    reviewMode = false;
+    const pool = allStatic().filter(x => cat === "All" || x.cat === cat);
+    const wantPort = cat === "Ports" || (cat === "All" && Math.random() < 0.2) || pool.length === 0;
+    if (wantPort) q = genPortQuestion();
+    else {
+      const choices = pool.length > 1 ? pool.filter(x => x.id !== lastId) : pool;
+      const base = pick(choices);
+      // shuffle answer order each time so you learn the answer, not the letter
+      const order = shuffle(base.opts.map((_, i) => i));
+      q = { ...base, opts: order.map(i => base.opts[i]), answer: order.indexOf(base.answer) };
+    }
+  }
+  current = q; lastId = q.id; selected = null; submitted = false;
+  render();
+}
+
+function render() {
+  const q = current;
+  $("qcat").textContent = (reviewMode ? "Review · " : "") + q.cat;
+  $("qsrc").textContent = q.src === "imported" ? "imported" : "";
+  $("qtext").textContent = q.q;
+  $("opts").innerHTML = "";
+  q.opts.forEach((o, i) => {
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.innerHTML = `<span class="l">${LETTERS[i]}.</span><span></span>`;
+    b.lastChild.textContent = o;
+    b.onclick = () => choose(i);
+    $("opts").appendChild(b);
+  });
+  $("fb").className = "feedback";
+  $("submitBtn").style.display = ""; $("submitBtn").disabled = true;
+  $("nextBtn").style.display = "none";
+  updateStats();
+}
+
+function choose(i) {
+  if (submitted || i >= current.opts.length) return;
+  selected = i;
+  [...$("opts").children].forEach((b, j) => b.classList.toggle("sel", j === i));
+  $("submitBtn").disabled = false;
+}
+
+function submit() {
+  if (selected === null || submitted) return;
+  submitted = true;
+  const ok = selected === current.answer;
+  [...$("opts").children].forEach((b, j) => {
+    b.disabled = true; b.classList.remove("sel");
+    if (j === current.answer) b.classList.add("right");
+    else if (j === selected) b.classList.add("wrong");
+  });
+  stats.total++; if (ok) stats.right++;
+  const key = current.q;
+  if (ok) missed = missed.filter(m => m.q !== key);
+  else if (!missed.some(m => m.q === key)) missed.push(current);
+  save("stats", stats); save("missed", missed);
+  const fb = $("fb");
+  fb.className = "feedback show " + (ok ? "good" : "bad");
+  fb.innerHTML = `<strong>${ok ? "Correct!" : "Incorrect — answer is " + LETTERS[current.answer] + "."}</strong>`;
+  if (current.exp) { const p = document.createElement("p"); p.textContent = current.exp; fb.appendChild(p); }
+  $("submitBtn").style.display = "none"; $("nextBtn").style.display = "";
+  if (reviewMode && !missed.length) reviewMode = false;
+  updateStats();
+}
+
+function updateStats() {
+  $("score").textContent = stats.right; $("answered").textContent = stats.total;
+  $("pct").textContent = stats.total ? Math.round(100 * stats.right / stats.total) + "%" : "–";
+  $("missedCount").textContent = missed.length;
+  $("reviewBtn").disabled = !missed.length;
+  $("reviewBtn").classList.toggle("primary", reviewMode);
+}
+
+// ---------- Import ----------
+// Expected format: [{ "q": "...", "opts": ["..","..","..",".."], "answer": 0, "exp": "optional", "cat": "optional" }]
+// "answer" may be an index (0-3) or a letter ("A"-"D").
+$("importBtn").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const arr = (Array.isArray(data) ? data : data.questions || []).map(x => {
+      let a = x.answer;
+      if (typeof a === "string") a = LETTERS.indexOf(a.trim().toUpperCase());
+      return { q: String(x.q || x.question), opts: (x.opts || x.options).map(String), answer: a, exp: x.exp || x.explanation || "", cat: x.cat || x.category || "Imported" };
+    }).filter(x => x.q && x.opts?.length >= 2 && x.answer >= 0 && x.answer < x.opts.length);
+    if (!arr.length) throw new Error("No valid questions found.");
+    imported = imported.concat(arr); save("imported", imported);
+    fillCats(); alert(`Imported ${arr.length} question(s). Total imported: ${imported.length}.`);
+  } catch (err) { alert("Import failed: " + err.message); }
+  e.target.value = "";
+};
+
+// ---------- Wiring ----------
+$("submitBtn").onclick = submit;
+$("nextBtn").onclick = nextQuestion;
+$("cat").onchange = () => { reviewMode = false; nextQuestion(); };
+$("reviewBtn").onclick = () => { reviewMode = !reviewMode; nextQuestion(); };
+$("resetBtn").onclick = () => { if (confirm("Reset score and missed list?")) { stats = { right: 0, total: 0 }; missed = []; save("stats", stats); save("missed", missed); reviewMode = false; updateStats(); } };
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT") return;
+  const k = e.key.toUpperCase();
+  const li = LETTERS.indexOf(k), ni = "123456".indexOf(k);
+  if (li >= 0 && li < 4) choose(li); else if (ni >= 0) choose(ni);
+  else if (e.key === "Enter") { e.preventDefault(); submitted ? nextQuestion() : submit(); }
+});
+
+fillCats();
+nextQuestion();
+</script>
+</body>
+</html>
